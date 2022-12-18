@@ -27,7 +27,7 @@ void print_dentry(struct user_dentry* dentry){
     printf("d_iname: %u\n", dentry->d_iname);
     printf("d_flags: %u\n", dentry->d_flags);
     printf("d_time: %lu\n", dentry->d_time);
-    printf("the root of the dentry tree superblock size: %lu\n", dentry->s_blocksize);
+    printf("dentry tree superblock size: %lu\n", dentry->s_blocksize);
     printf("-------------\n");
 }
 
