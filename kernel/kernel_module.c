@@ -15,7 +15,7 @@
 
 #define PROC_FILE_MAX_SIZE 256
 #define BUF_INFO_MAX_SIZE 1000
-#define PROC_FILE_NAME "proc_inf"
+#define PROC_FILE "file_to_read"
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Danil Sabitov");
@@ -25,6 +25,7 @@ MODULE_VERSION("0.01");
 static struct proc_dir_entry *proc_file;
 static struct dentry *dentry;
 
+struct user_dentry u_dentry;
 struct user_dentry{
     unsigned int d_flags;
     unsigned long d_time;
@@ -33,6 +34,7 @@ struct user_dentry{
     unsigned char d_iname;
 };
 
+struct user_pci_dev u_pci;
 struct user_pci_dev {
     unsigned int	devfn;
     unsigned short	vendor;
@@ -40,53 +42,45 @@ struct user_pci_dev {
     unsigned short	subsystem_vendor;
     unsigned short	subsystem_device;
 };
-struct pci_dev *dev;
-struct user_pci_dev u_pci;
 
+struct pci_dev *dev;
 
 static ssize_t proc_file_read(struct file *, char __user *, size_t, loff_t *);
 static ssize_t proc_file_write(struct file *, const char __user *, size_t, loff_t *);
 
-static const struct file_operations proc_file_ops = {
+static struct file_operations proc_file_ops = {
         .read = proc_file_read,
         .write = proc_file_write,
 };
 
 static int __init proc_info_mod_init(void) {
-    proc_file = proc_create(PROC_FILE_NAME, 0777, NULL, &proc_file_ops);
-    if (NULL == proc_file) {
+    proc_file = proc_create(PROC_FILE, 0777, NULL, &proc_file_ops);
+    if (proc_file == NULL) {
         proc_remove(proc_file);
-        printk("ERROR: could not initialize /proc/%s\n", PROC_FILE_NAME);
+        printk("ERROR: could not initialize /proc/%s\n", PROC_FILE);
         return -ENOMEM;
     }
     printk("Module for lab2 started working!");
-    printk("/proc/%s\n", PROC_FILE_NAME);
+    printk("/proc/%s\n", PROC_FILE);
     return 0;
 }
 
 static void __exit proc_info_mod_exit(void) {
-    remove_proc_entry(PROC_FILE_NAME, NULL);
-    printk("Goodbye!!! /proc/%s removed.", PROC_FILE_NAME);
+    remove_proc_entry(PROC_FILE, NULL);
+    printk("Goodbye!!! /proc/%s removed.", PROC_FILE);
 }
 
 static ssize_t proc_file_read(struct file *file, char __user *user, size_t length, loff_t *offset) {
-
     loff_t new_len;
     char kern_info[BUF_INFO_MAX_SIZE];
     char check;
     check = 0;
     new_len = 0;
 
-if (*offset > 0){
-        return 0;
-    }
-    printk("Proc file is reading.");
-
     if (dentry == NULL) {
         printk("Error! Can't find dentry from path.");
     }
     else {
-        struct user_dentry u_dentry;
         u_dentry = (struct user_dentry){
                 .d_flags = dentry->d_flags,
                 .d_time = dentry->d_time,
@@ -108,11 +102,11 @@ if (*offset > 0){
     } else {
         printk(KERN_INFO "Pci device found!\n");
         u_pci = (struct user_pci_dev){
-                .device = dev->device,
-                .subsystem_device = dev->subsystem_device,
-                .subsystem_vendor = dev->subsystem_vendor,
+                .devfn = dev->devfn,
                 .vendor = dev->vendor,
-                .devfn = dev->devfn
+                .device = dev->device,
+                .subsystem_vendor = dev->subsystem_vendor,
+                .subsystem_device = dev->subsystem_device
         };
         memcpy(kern_info + new_len, &u_pci, sizeof(struct user_pci_dev));
         new_len += sizeof(u_pci);
@@ -126,24 +120,21 @@ static ssize_t proc_file_write(struct file *file, const char __user *user, size_
     struct path path;
     int error;
     char path_ch[BUF_INFO_MAX_SIZE] = {0};
+    ssize_t try_to_write;
 
-    if (*offset > 0) {
-        return 0;
-    }
-
-    if (copy_from_user(path_ch, user, length)){
+    try_to_write = simple_write_to_buffer(path_ch, BUF_INFO_MAX_SIZE, offset, user, length);
+    if (try_to_write < 0){
+        printk("ERROR! Failed to write to buffer!");
         return -EFAULT;
         }
-
-    printk("Path = %s, Path length =  %zu", path_ch, strlen(path_ch));
-
     error = kern_path(path_ch, LOOKUP_FOLLOW, &path);
     if (error) {
         printk("PATH ERROR!");
+        dentry = NULL;
         return error;
     }
+    printk("Path = %s, Path length =  %zu", path_ch, strlen(path_ch));
     dentry = file->f_path.dentry;
-    *offset = strlen(path_ch);
     return strlen(path_ch);
 }
 
